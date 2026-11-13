@@ -31,3 +31,7 @@ jobs:
               "$pwd/$path", [ref]$null, [ref]$parseErrors) | Out-Null
             if ($parseErrors.Count) { throw 'PowerShell parse failed' }
           }
+      - name: Check native MSI database authoring on a synthetic fixture
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./tests/check-native-msi-metadata.ps1

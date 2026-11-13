@@ -4,6 +4,7 @@
 param([Parameter(Mandatory=$true)][string]$PackagePath)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
+trap { Write-Output $_.ScriptStackTrace; throw }
 # The caller first verifies the original package against the authenticated
 # release inventory. Rewrite only the action table using Windows' native MSI
 # database writer; preserve the original package and embedded payload stream.
@@ -14,7 +15,12 @@ Copy-Item -LiteralPath $PackagePath -Destination $copy
 $engine=New-Object -ComObject WindowsInstaller.Installer
 $db=$engine.OpenDatabase($copy,1)
 function Query([string]$Sql) {
-    $view=$db.OpenView($Sql);$view.Execute();$view.Close()
+    Write-Output ('Native MSI SQL: '+$Sql)
+    try { $view=$db.OpenView($Sql);$view.Execute();$view.Close() }
+    catch {
+        try { Write-Output $engine.LastErrorRecord.FormatText } catch { }
+        throw
+    }
 }
 try {
     $view=$db.OpenView('SELECT `File`,`FileName` FROM `File`');$view.Execute()
@@ -25,6 +31,7 @@ try {
     $view.Close()
     if (-not $fileId -or $fileId -notmatch '^[A-Za-z0-9_]+$') { throw 'MSI management entry point is missing.' }
     Query 'DROP TABLE `CustomAction`'
+    $db.Commit()
     Query 'CREATE TABLE `CustomAction` (`Action` CHAR(72) NOT NULL, `Type` SHORT NOT NULL, `Source` CHAR(72), `Target` CHAR(0) LOCALIZABLE, `ExtendedType` LONG PRIMARY KEY `Action`)'
     $command='"[System64Folder]WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File "[#'+$fileId+']" -Action '
     foreach ($item in @(@('SCInstallServices',3106,'Install'),@('SCRemoveServices',3106,'Uninstall'),@('SCRollbackServices',3426,'Uninstall'))) {
