@@ -37,7 +37,7 @@ function MSI([string]$Mode) {
                     Start-Sleep 10
                     if (Test-Path $systemLog) { Write-Output 'SYSTEM-context diagnostic:'; Get-Content $systemLog }
                 } finally { Unregister-ScheduledTask -TaskName $task -Confirm:$false -ErrorAction SilentlyContinue }
-                Write-Output 'Diagnosing the same verified installer under native Windows PowerShell 5.1:' 
+                Write-Output 'Diagnosing the same verified installer under native Windows PowerShell 5.1:'
                 & $legacyPS -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File (Join-Path $diagnostic 'Install.ps1') -Action Install
                 Write-Output ('Diagnostic installer exit: '+$LASTEXITCODE)
                 & $legacyPS -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File (Join-Path $diagnostic 'Install.ps1') -Action Uninstall
