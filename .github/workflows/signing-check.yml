@@ -35,3 +35,12 @@ jobs:
             echo 'ERROR: modified bytes were accepted'
             exit 1
           fi
+      - name: Reject a different workflow identity
+        run: |
+          printf '%s\n' 'ShadowClaw distribution signing self-test; no product artifact' > signing-check.txt
+          if cosign verify-blob --bundle signing-check.sigstore.json \
+            --certificate-identity 'https://github.com/gatekeeper454/ShadowClaw-Releases/.github/workflows/release.yml@refs/heads/main' \
+            --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' signing-check.txt; then
+            echo 'ERROR: wrong workflow identity was accepted'
+            exit 1
+          fi

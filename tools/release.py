@@ -122,6 +122,9 @@ def archive_members(path):
     if path.name.endswith(".zip"):
         with zipfile.ZipFile(path) as archive:
             for member in archive.infolist():
+                # zipfile normalizes backslashes on Windows and truncates NULs.
+                # Validate the original stored name before either transformation.
+                safe_member(member.orig_filename)
                 check(member.filename, member.file_size)
                 mode = member.external_attr >> 16
                 require(not stat.S_ISLNK(mode) and not member.flag_bits & 1, "Linked/encrypted ZIP rejected")
