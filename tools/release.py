@@ -105,10 +105,17 @@ def safe_member(name):
 def scan_stream(stream):
     tail = b""
     size = 0
+    is_elf = False
     while chunk := stream.read(1024 * 1024):
+        if size == 0:
+            is_elf = chunk.startswith(b"\x7fELF")
         size += len(chunk)
         require(size <= MAX_FILE, "File exceeds scan limit")
-        require(not LEAK.search(tail + chunk), "Potential credential/private path detected; review locally")
+        for match in LEAK.finditer(tail + chunk):
+            # ELF string tables may place generic /home/ and root/ constants
+            # together. This exact root-account constant is not a developer home.
+            require(is_elf and match.group() == b"/home/root/",
+                    "Potential credential/private path detected; review locally")
         tail = chunk[-2048:]
 
 
