@@ -4,7 +4,7 @@
 param([Parameter(Mandatory=$true)][string]$PackagePath)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
-trap { Write-Output $_.ScriptStackTrace; throw }
+trap { Write-Output $_.ScriptStackTrace; throw $_ }
 # The caller first verifies the original package against the authenticated
 # release inventory. Rewrite only the action table using Windows' native MSI
 # database writer; preserve the original package and embedded payload stream.
@@ -41,13 +41,14 @@ try {
         $row.StringData(3)='System64Folder';$row.StringData(4)=$command+$item[2];$row.IntegerData(5)=0
         $view.Execute($row);$view.Close()
     }
+    # Update summary information through this open database; opening the same
+    # file through Installer while views are alive creates a sharing conflict.
+    $summary=$db.SummaryInformation(1)
+    $summary.Property(9)='{'+[Guid]::NewGuid().ToString().ToUpperInvariant()+'}'
+    $summary.Persist()
+    [Runtime.InteropServices.Marshal]::FinalReleaseComObject($summary) | Out-Null
     $db.Commit()
 } finally { [Runtime.InteropServices.Marshal]::FinalReleaseComObject($db) | Out-Null }
-# Assign a fresh package code because metadata bytes changed.
-$summary=$engine.SummaryInformation($copy,1)
-$summary.Property(9)='{'+[Guid]::NewGuid().ToString().ToUpperInvariant()+'}'
-$summary.Persist()
-[Runtime.InteropServices.Marshal]::FinalReleaseComObject($summary) | Out-Null
 [Runtime.InteropServices.Marshal]::FinalReleaseComObject($engine) | Out-Null
 @{input_sha256=(Get-FileHash -LiteralPath $PackagePath -Algorithm SHA256).Hash.ToLowerInvariant();output_sha256=(Get-FileHash -LiteralPath $copy -Algorithm SHA256).Hash.ToLowerInvariant();change='Native Windows CustomAction table writer; embedded product payload unchanged.'} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output 'metadata-finalization.json')
 'PACKAGE_ARCHIVE='+$copy | Out-File -LiteralPath $env:GITHUB_ENV -Encoding utf8 -Append
