@@ -16,7 +16,7 @@ $engine=New-Object -ComObject WindowsInstaller.Installer
 $db=$engine.OpenDatabase($copy,1)
 function Query([string]$Sql) {
     Write-Output ('Native MSI SQL: '+$Sql)
-    try { $view=$db.OpenView($Sql);$view.Execute();$view.Close() }
+    try { $view=$db.OpenView($Sql);$view.Execute();$view.Close();[Runtime.InteropServices.Marshal]::FinalReleaseComObject($view) | Out-Null }
     catch {
         try { Write-Output $engine.LastErrorRecord.FormatText } catch { }
         throw
@@ -28,7 +28,7 @@ try {
     while ($record=$view.Fetch()) {
         if (($record.StringData(2) -split '\|')[-1] -eq 'MsiAction.ps1') { $fileId=$record.StringData(1) }
     }
-    $view.Close()
+    $view.Close();[Runtime.InteropServices.Marshal]::FinalReleaseComObject($view) | Out-Null
     if (-not $fileId -or $fileId -notmatch '^[A-Za-z0-9_]+$') { throw 'MSI management entry point is missing.' }
     Query 'DROP TABLE `CustomAction`'
     $db.Commit()
@@ -40,6 +40,8 @@ try {
         $row.StringData(1)=$item[0];$row.IntegerData(2)=[int]$item[1]
         $row.StringData(3)='System64Folder';$row.StringData(4)=$command+$item[2];$row.IntegerData(5)=0
         $view.Execute($row);$view.Close()
+        [Runtime.InteropServices.Marshal]::FinalReleaseComObject($row) | Out-Null
+        [Runtime.InteropServices.Marshal]::FinalReleaseComObject($view) | Out-Null
     }
     # Update summary information through this open database; opening the same
     # file through Installer while views are alive creates a sharing conflict.
@@ -50,5 +52,6 @@ try {
     $db.Commit()
 } finally { [Runtime.InteropServices.Marshal]::FinalReleaseComObject($db) | Out-Null }
 [Runtime.InteropServices.Marshal]::FinalReleaseComObject($engine) | Out-Null
+[GC]::Collect();[GC]::WaitForPendingFinalizers()
 @{input_sha256=(Get-FileHash -LiteralPath $PackagePath -Algorithm SHA256).Hash.ToLowerInvariant();output_sha256=(Get-FileHash -LiteralPath $copy -Algorithm SHA256).Hash.ToLowerInvariant();change='Native Windows CustomAction table writer; embedded product payload unchanged.'} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output 'metadata-finalization.json')
 'PACKAGE_ARCHIVE='+$copy | Out-File -LiteralPath $env:GITHUB_ENV -Encoding utf8 -Append

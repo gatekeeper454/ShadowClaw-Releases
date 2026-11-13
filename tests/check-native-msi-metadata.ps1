@@ -9,7 +9,7 @@ foreach ($sql in @(
  'CREATE TABLE `File` (`File` CHAR(72) NOT NULL, `FileName` CHAR(255) NOT NULL PRIMARY KEY `File`)',
  'INSERT INTO `File` (`File`,`FileName`) VALUES (''FixtureEntry'',''MsiAction.ps1'')',
  'CREATE TABLE `CustomAction` (`Action` CHAR(72) NOT NULL, `Type` SHORT NOT NULL, `Source` CHAR(72), `Target` CHAR(255) PRIMARY KEY `Action`)'
-)) { $view=$db.OpenView($sql);$view.Execute();$view.Close() }
+)) { $view=$db.OpenView($sql);$view.Execute();$view.Close();[Runtime.InteropServices.Marshal]::FinalReleaseComObject($view) | Out-Null }
 $db.Commit();[Runtime.InteropServices.Marshal]::FinalReleaseComObject($db) | Out-Null
 $priorTemp=$env:RUNNER_TEMP;$priorEnv=$env:GITHUB_ENV
 try {
