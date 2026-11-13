@@ -1,10 +1,16 @@
-# Configure Windows signing
+# Optional Windows Authenticode signing
 
-The Windows path is prepared but requires a Microsoft Azure Artifact Signing
-account and an identity-validated **Public Trust** certificate profile. This
-repository does not provision paid Azure resources or complete identity checks.
-Until the account is configured, a Windows release fails before signing and
-cannot be promoted by this workflow. Linux-only releases do not require Azure.
+Windows packages use **unsigned executables with SHA-256 checksums and a
+GitHub/Cosign-signed checksum inventory** by default. Azure is optional.
+The default workflow verifies the Windows payload is unsigned and keeps its
+approved package bytes unchanged. It includes `windows-unsigned.json` in the
+signed inventory. See [download verification and Windows prompts](verification.md).
+
+For a future Authenticode-signed release, explicitly select **authenticode** in
+the release workflow. That opt-in path requires a Microsoft Azure Artifact
+Signing account and identity-validated **Public Trust** certificate profile.
+It fails if those settings are missing; it never falls back silently.
+This repository does not provision paid Azure resources or complete identity checks.
 
 Follow Microsoft's [account and signing setup](https://learn.microsoft.com/en-us/azure/artifact-signing/)
 and the official action's [OIDC instructions](https://github.com/Azure/artifact-signing-action/blob/main/docs/OIDC.md).
@@ -39,7 +45,7 @@ and the official action's [OIDC instructions](https://github.com/Azure/artifact-
 5. Keep the environment restricted to `main` and require the maintainer's
    approval. Trust the **environment** identity above, not a wildcard repository
    subject. The release workflow also checks the exact repository and main ref.
-6. Prepare a reviewed draft, invoke **Sign and finalize release** with publishing
+6. Prepare a reviewed draft, invoke **Sign and finalize release** with **authenticode** selected and publishing
    disabled, and inspect the resulting signed bytes. Certify those exact final
    packages on the supported native Windows hosts before publishing.
 

@@ -1,7 +1,9 @@
 # Copyright (c) 2026 Mike Storm. All rights reserved.
+[CmdletBinding(DefaultParameterSetName="Signed")]
 param(
     [Parameter(Mandatory=$true)][string]$Directory,
-    [Parameter(Mandatory=$true)][string]$ExpectedSubject,
+    [Parameter(Mandatory=$true,ParameterSetName="Signed")][string]$ExpectedSubject,
+    [Parameter(Mandatory=$true,ParameterSetName="Unsigned")][switch]$Unsigned,
     [Parameter(Mandatory=$true)][string]$Report
 )
 $ErrorActionPreference = 'Stop'
@@ -12,6 +14,15 @@ $records = @(Get-ChildItem -LiteralPath $root -File -Recurse | Where-Object {
     $_.Extension.ToLowerInvariant() -in $extensions
 } | Sort-Object FullName | ForEach-Object {
     $signature = Get-AuthenticodeSignature -LiteralPath $_.FullName
+    if ($Unsigned) {
+        if ($signature.Status -ne 'NotSigned') { throw 'Expected an unsigned Windows payload; inspect its actual signature status' }
+        [ordered]@{
+            path = [IO.Path]::GetRelativePath($root, $_.FullName).Replace('\', '/')
+            sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            authenticode = 'NotSigned'
+        }
+        return
+    }
     if ($signature.Status -ne 'Valid') { throw 'Authenticode trust validation failed' }
     if ($signature.SignerCertificate.Subject -cne $ExpectedSubject) { throw 'Unexpected Authenticode publisher' }
     if ($null -eq $signature.TimeStamperCertificate) { throw 'RFC 3161 timestamp missing' }

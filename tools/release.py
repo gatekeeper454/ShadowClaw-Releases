@@ -22,6 +22,7 @@ ROLES = {"package", "documentation", "sbom", "legal"}
 MANIFEST = "release-manifest.json"
 CHECKSUMS = "SHA256SUMS"
 REPORT = "windows-signatures.json"
+UNSIGNED_REPORT = "windows-unsigned.json"
 BUNDLE = "SHA256SUMS.sigstore.json"
 MAX_FILE = 1024 * 1024 * 1024
 MAX_EXPANDED = 2 * MAX_FILE
@@ -193,8 +194,9 @@ def validate_manifest(value):
 
 def checksums(directory, manifest):
     names = [a["name"] for a in manifest["assets"]] + [MANIFEST]
-    if (directory / REPORT).exists():
-        names.append(REPORT)
+    for report in (REPORT, UNSIGNED_REPORT):
+        if (directory / report).exists():
+            names.append(report)
     return "".join(f"{digest(directory / name)}  {name}\n" for name in sorted(names))
 
 
@@ -213,7 +215,7 @@ def verify(directory, expected=None):
     if expected:
         require(HASH.fullmatch(expected) and digest(directory / MANIFEST) == expected, "Manifest approval hash mismatch")
     manifest = validate_manifest(load(directory / MANIFEST))
-    allowed = {a["name"] for a in manifest["assets"]} | {MANIFEST, CHECKSUMS, REPORT, BUNDLE}
+    allowed = {a["name"] for a in manifest["assets"]} | {MANIFEST, CHECKSUMS, REPORT, UNSIGNED_REPORT, BUNDLE}
     require({p.name for p in directory.iterdir()} <= allowed, "Unlisted release files rejected")
     for asset in manifest["assets"]:
         path = directory / asset["name"]
@@ -222,6 +224,9 @@ def verify(directory, expected=None):
     if (directory / REPORT).exists():
         with (directory / REPORT).open("rb") as stream:
             scan_stream(stream)
+    if (directory / UNSIGNED_REPORT).exists():
+        require(not (directory / REPORT).exists(), "Conflicting Windows signature claims")
+        verify_unsigned_report(directory, manifest, load(directory / UNSIGNED_REPORT))
     require((directory / CHECKSUMS).read_text(encoding="utf-8") == checksums(directory, manifest), "Checksum inventory mismatch")
     return manifest
 
@@ -275,7 +280,7 @@ def download(tag, directory, expected):
     gh("release", "download", tag, "--repo", REPOSITORY, "--dir", str(directory))
     manifest = verify(directory, expected)
     require("v" + manifest["version"] == tag, "Draft version mismatch")
-    require(not (directory / BUNDLE).exists() and not (directory / REPORT).exists(), "Draft was already finalized; do not re-sign it")
+    require(not any((directory / name).exists() for name in (BUNDLE, REPORT, UNSIGNED_REPORT)), "Draft was already finalized; do not re-sign it")
     return manifest
 
 
@@ -304,6 +309,35 @@ def windows_unpack(directory, output):
             shutil.copyfile(source, target / asset["name"])
     files = [p for p in output.rglob("*") if p.is_file()]
     require(any(p.suffix.lower() in SIGNABLE for p in files), "Windows package has no supported signing targets")
+
+
+def verify_unsigned_report(directory, manifest, records):
+    require(isinstance(records, list) and records, "Missing unsigned Windows verification report")
+    expected = {}
+    for asset in manifest["assets"]:
+        if asset["role"] != "package" or not asset["platform"].startswith("windows-"):
+            continue
+        path = directory / asset["name"]
+        if path.suffix == ".zip":
+            with zipfile.ZipFile(path) as archive:
+                for member in archive.infolist():
+                    if not member.is_dir() and PurePosixPath(member.filename).suffix.lower() in SIGNABLE:
+                        expected[asset["name"] + "/" + member.filename] = hashlib.sha256(archive.read(member)).hexdigest()
+        else:
+            expected[asset["name"] + "/" + asset["name"]] = digest(path)
+    require(len(records) == len(expected) and {record["path"] for record in records} == set(expected), "Unsigned Windows target inventory mismatch")
+    for record in records:
+        require(set(record) == {"path", "sha256", "authenticode"}, "Invalid unsigned Windows record")
+        require(record["authenticode"] == "NotSigned" and record["sha256"] == expected[record["path"]],
+                "Unsigned Windows status/hash mismatch")
+
+
+def windows_unsigned(directory, report):
+    manifest = verify(directory)
+    verify_unsigned_report(directory, manifest, load(report))
+    shutil.copyfile(report, directory / UNSIGNED_REPORT)
+    write_text(directory / CHECKSUMS, checksums(directory, manifest))
+    verify(directory)
 
 
 def windows_pack(directory, signing, report):
@@ -341,6 +375,8 @@ def upload_final(tag, directory, original_hash, publish):
     manifest = verify(directory)
     require(tag == "v" + manifest["version"], "Release version mismatch")
     require((directory / BUNDLE).is_file(), "Signed checksum bundle required")
+    if any(a["role"] == "package" and a["platform"].startswith("windows-") for a in manifest["assets"]):
+        require((directory / REPORT).is_file() or (directory / UNSIGNED_REPORT).is_file(), "Windows trust-status report required")
     subprocess.run([
         "cosign", "verify-blob", "--bundle", str(directory / BUNDLE),
         "--certificate-identity", f"https://github.com/{REPOSITORY}/.github/workflows/release.yml@refs/heads/main",
@@ -366,7 +402,7 @@ def upload_final(tag, directory, original_hash, publish):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["stage", "verify", "draft", "download", "windows-unpack", "windows-pack", "upload-final"])
+    parser.add_argument("command", choices=["stage", "verify", "draft", "download", "windows-unpack", "windows-pack", "windows-unsigned", "upload-final"])
     parser.add_argument("--directory", type=Path)
     parser.add_argument("--spec", type=Path)
     parser.add_argument("--out", type=Path)
@@ -394,6 +430,9 @@ def main():
     elif args.command == "windows-pack":
         require(args.directory and args.signing and args.report, "windows-pack requires --directory, --signing and --report")
         windows_pack(args.directory, args.signing, args.report)
+    elif args.command == "windows-unsigned":
+        require(args.directory and args.report, "windows-unsigned requires --directory and --report")
+        windows_unsigned(args.directory, args.report)
     elif args.command == "upload-final":
         require(args.tag and args.directory and args.expected, "upload-final requires --tag, --directory and --expected")
         upload_final(args.tag, args.directory, args.expected, args.publish)
@@ -404,7 +443,7 @@ def main():
             require(args.notes and args.notes.is_file(), "Draft requires reviewed public --notes")
             with args.notes.open("rb") as stream:
                 scan_stream(stream)
-            require(not (args.directory / BUNDLE).exists() and not (args.directory / REPORT).exists(), "Use a new unsigned draft")
+            require(not any((args.directory / name).exists() for name in (BUNDLE, REPORT, UNSIGNED_REPORT)), "Use a new unsigned draft")
             branch = json.loads(gh("api", f"repos/{REPOSITORY}"))["default_branch"]
             commit = json.loads(gh("api", f"repos/{REPOSITORY}/commits/{branch}"))["sha"]
             gh("release", "create", "v" + value["version"], "--repo", REPOSITORY, "--draft", "--target", commit,

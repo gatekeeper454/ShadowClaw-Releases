@@ -97,18 +97,27 @@ that tag as the application's private source commit or as build provenance.
 
 In Actions, run **Sign and finalize release** on **main**. Supply the version
 without `v`, the reviewed manifest SHA-256 and the desired publish setting.
-Publishing defaults to **false**. Approve the protected **release** environment.
+Leave **authenticode** off for the default unsigned Windows distribution;
+Azure configuration is not required. Publishing defaults to **false**.
+Approve the protected **release** environment.
 
 The workflow downloads only the selected draft, verifies the approval digest
-and complete inventory, signs Windows targets when present, then signs the
-final checksum inventory using Cosign and GitHub OIDC. The signed inventory
-covers the final assets, public manifest and Windows signature report when
-present. No application build provenance is invented for uploaded binaries.
+and complete inventory, inspects Windows targets without executing them, and
+records their unsigned status in `windows-unsigned.json`. The default path does
+not change package bytes or contact Azure. It then signs the final checksum
+inventory using Cosign and GitHub OIDC. The inventory covers the assets, public
+manifest and Windows verification report. No application build provenance is
+invented for uploaded binaries.
+
+Optional **authenticode** applies the separately configured Azure signing path
+and emits `windows-signatures.json` instead. Clearly identify the selected
+Windows trust policy in the public release notes. For unsigned packages, link
+users to the checksum verification and Windows prompt/policy guidance.
 
 With publishing disabled, retrieve the signed draft's bytes and run final native
 acceptance against them. After those gates pass, publish that existing signed
-draft through GitHub's release UI. Do **not** rerun signing: it changes the
-Windows package bytes and would invalidate acceptance of the earlier hashes.
+draft through GitHub's release UI. Do **not** rerun finalization on an already finalized draft. Optional
+Authenticode changes Windows package bytes and requires acceptance of the new hashes.
 If native acceptance has already qualified these exact final bytes and you
 intend immediate publication, select publish in the initial workflow run.
 
@@ -120,7 +129,7 @@ than bypassing verification. Release notes and titles are not covered by
 `SHA256SUMS`; put every security-relevant downloadable file in the manifest.
 
 Before promotion, follow [download verification](verification.md), check all
-native platform gates for the **signed final bytes**, and confirm accurate
+native platform gates for the **exact distributed bytes**, and confirm accurate
 platform support, publisher identity and licensing. Do not attach source archives,
 private verification records or tenant data. Historical releases in other
 channels keep their original identities and bytes.
