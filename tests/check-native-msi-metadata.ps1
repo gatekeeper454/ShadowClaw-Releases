@@ -8,7 +8,8 @@ $db=$engine.OpenDatabase($inputFile,3)
 foreach ($sql in @(
  'CREATE TABLE `File` (`File` CHAR(72) NOT NULL, `FileName` CHAR(255) NOT NULL PRIMARY KEY `File`)',
  'INSERT INTO `File` (`File`,`FileName`) VALUES (''FixtureEntry'',''MsiAction.ps1'')',
- 'CREATE TABLE `CustomAction` (`Action` CHAR(72) NOT NULL, `Type` SHORT NOT NULL, `Source` CHAR(72), `Target` CHAR(255) PRIMARY KEY `Action`)'
+ 'CREATE TABLE `Property` (`Property` CHAR(72) NOT NULL, `Value` CHAR(0) NOT NULL LOCALIZABLE PRIMARY KEY `Property`)',
+ 'INSERT INTO `Property` (`Property`,`Value`) VALUES (''SHADOWCLAW_MSI_INCOMPLETE'',''1'')'
 )) { $view=$db.OpenView($sql);$view.Execute();$view.Close();[Runtime.InteropServices.Marshal]::FinalReleaseComObject($view) | Out-Null }
 $db.Commit();[Runtime.InteropServices.Marshal]::FinalReleaseComObject($db) | Out-Null
 $priorTemp=$env:RUNNER_TEMP;$priorEnv=$env:GITHUB_ENV
@@ -24,7 +25,11 @@ try {
   if ($row.IntegerData(2) -notin @(3106,3426) -or $row.StringData(3) -ne 'System64Folder' -or -not $row.StringData(4).Contains('[#FixtureEntry]') -or $row.IntegerData(5) -ne 0) {throw 'Native MSI action metadata is invalid.'}
  }
  if ($count -ne 3) {throw 'Native MSI action count is invalid.'}
- $view.Close();[Runtime.InteropServices.Marshal]::FinalReleaseComObject($db) | Out-Null
+ $view.Close()
+ $view=$db.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''SHADOWCLAW_MSI_INCOMPLETE''');$view.Execute()
+ if ($view.Fetch()) {throw 'Finalized MSI still has its incomplete-package gate.'}
+ $view.Close();[Runtime.InteropServices.Marshal]::FinalReleaseComObject($view) | Out-Null
+ [Runtime.InteropServices.Marshal]::FinalReleaseComObject($db) | Out-Null
  Write-Output 'PASS: native MSI database rewrite and subsequent action-table read.'
 } finally {
  $env:RUNNER_TEMP=$priorTemp;$env:GITHUB_ENV=$priorEnv

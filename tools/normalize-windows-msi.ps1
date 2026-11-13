@@ -30,8 +30,11 @@ try {
     }
     $view.Close();[Runtime.InteropServices.Marshal]::FinalReleaseComObject($view) | Out-Null
     if (-not $fileId -or $fileId -notmatch '^[A-Za-z0-9_]+$') { throw 'MSI management entry point is missing.' }
-    Query 'DROP TABLE `CustomAction`'
-    $db.Commit()
+    $tables=@()
+    $view=$db.OpenView('SELECT `Name` FROM `_Tables`');$view.Execute()
+    while ($record=$view.Fetch()) { $tables+= $record.StringData(1) }
+    $view.Close();[Runtime.InteropServices.Marshal]::FinalReleaseComObject($view) | Out-Null
+    if ($tables -contains 'CustomAction') { Query 'DROP TABLE `CustomAction`';$db.Commit() }
     Query 'CREATE TABLE `CustomAction` (`Action` CHAR(72) NOT NULL, `Type` SHORT NOT NULL, `Source` CHAR(72), `Target` CHAR(0) LOCALIZABLE, `ExtendedType` LONG PRIMARY KEY `Action`)'
     $command='"[System64Folder]WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File "[#'+$fileId+']" -Action '
     foreach ($item in @(@('SCInstallServices',3106,'Install'),@('SCRemoveServices',3106,'Uninstall'),@('SCRollbackServices',3426,'Uninstall'))) {
@@ -43,6 +46,7 @@ try {
         [Runtime.InteropServices.Marshal]::FinalReleaseComObject($row) | Out-Null
         [Runtime.InteropServices.Marshal]::FinalReleaseComObject($view) | Out-Null
     }
+    if ($tables -contains 'Property') { Query 'DELETE FROM `Property` WHERE `Property`=''SHADOWCLAW_MSI_INCOMPLETE''' }
     # Update summary information through this open database; opening the same
     # file through Installer while views are alive creates a sharing conflict.
     $summary=$db.SummaryInformation(1)
