@@ -32,7 +32,9 @@ try {
     & $installer -Action Disable
     foreach ($name in @($sensorName,$identityName)) {
         $service=Get-Service -Name $name
-        if ($service.Status -ne 'Stopped' -or $service.StartType -ne 'Manual') { throw 'Disable did not preserve the stopped/manual state.' }
+        $expectedStart=if ($name -eq $sensorName) { 'Manual' } else { 'Disabled' }
+        if ($service.Status -ne 'Stopped' -or $service.StartType -ne $expectedStart) { throw 'Disable did not select the component-specific stopped startup mode.' }
+        $service.Dispose()
     }
     & $installer -Action Install
     & $installer -Action Uninstall
