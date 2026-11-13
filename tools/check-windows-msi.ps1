@@ -15,6 +15,18 @@ function MSI([string]$Mode) {
     $process=Start-Process -FilePath $msiexec -ArgumentList @('/'+$Mode,'"'+$PackagePath+'"','/qn','/norestart','/l*v','"'+$log+'"') -PassThru -Wait
     if ($process.ExitCode -notin @(0,3010)) {
         if (Test-Path $log) { Get-Content $log | Select-String 'Return value 3|Error |exception|failed|Failure' | Select-Object -Last 20 }
+        if ($Mode -eq 'i') {
+            $zip=[IO.Path]::Combine([IO.Path]::GetDirectoryName($PackagePath),[IO.Path]::GetFileNameWithoutExtension($PackagePath).ToLowerInvariant()+'.zip')
+            if (Test-Path -LiteralPath $zip) {
+                $diagnostic=Join-Path $env:RUNNER_TEMP ('sc-msi-diagnostic-'+[Guid]::NewGuid().ToString('N'))
+                Expand-Archive -LiteralPath $zip -DestinationPath $diagnostic
+                $legacyPS=Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell/v1.0/powershell.exe'
+                Write-Output 'Diagnosing the same verified installer under native Windows PowerShell 5.1:'
+                & $legacyPS -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File (Join-Path $diagnostic 'Install.ps1') -Action Install
+                Write-Output ('Diagnostic installer exit: '+$LASTEXITCODE)
+                & $legacyPS -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File (Join-Path $diagnostic 'Install.ps1') -Action Uninstall
+            }
+        }
         throw "Windows Installer failed with exit code $($process.ExitCode)"
     }
 }
