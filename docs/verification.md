@@ -2,7 +2,8 @@
 
 Download the selected assets, `release-manifest.json`, `SHA256SUMS` and
 `SHA256SUMS.sigstore.json` from the **same published release**. If supplied,
-also download `windows-signatures.json`. Avoid artifacts from pull requests,
+also download `windows-unsigned.json` or `windows-signatures.json`, as listed in
+`SHA256SUMS`. Avoid artifacts from pull requests,
 workflow test runs or other repositories.
 
 Install [Cosign](https://docs.sigstore.dev/cosign/system_config/installation/)
@@ -32,17 +33,54 @@ file. On Windows compare `Get-FileHash -Algorithm SHA256` for each selected asse
 with its exact filename and hash in the authenticated `SHA256SUMS`. Any missing
 file error is different from a hash mismatch; every asset you install must match.
 
-For Windows, extract the package and check its executable/installer signatures:
+## Windows: unsigned packages and expected prompts
+
+The default Windows distribution is **unsigned with respect to Authenticode**.
+It uses SHA-256 and the GitHub/Cosign-signed inventory above. Check the archive
+before extracting it. In PowerShell, replace the filename with the exact asset
+listed in the release:
+
+```powershell
+Get-FileHash -LiteralPath .\shadowclaw-2.0.0-windows-amd64.zip -Algorithm SHA256
+Get-Content -LiteralPath .\SHA256SUMS
+```
+
+Compare all 64 hexadecimal characters with the entry for that exact filename;
+letter case does not matter. A hash comparison establishes a match to the
+published bytes. Verifying the Cosign signature first authenticates the
+inventory's release-workflow identity. Neither check removes Windows warnings.
+`windows-unsigned.json` records the hashes and `NotSigned` status of executable,
+installer and supported PowerShell files inside the package. It is covered by
+the signed checksum inventory.
+
+SmartScreen may show **Windows protected your PC** for an unrecognized download.
+After verifying the release and deciding to trust it, users can normally select
+**More info → Run anyway** when that option is available. Administrative
+installation may separately prompt for elevation and show an unknown publisher.
+[Microsoft's SmartScreen guidance](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation).
+
+Windows 11 **Smart App Control** can block an unrecognized unsigned application
+without an individual-app override. Enterprise application-control, SmartScreen
+or PowerShell policies can also prevent installation/execution. Follow the
+organization's approved deployment process on managed devices; a checksum or
+Cosign signature does not override those policies.
+[Smart App Control FAQ](https://support.microsoft.com/en-gb/windows/security/threat-malware-protection/smart-app-control-frequently-asked-questions),
+[PowerShell execution policies](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_execution_policies).
+
+### Optional Authenticode-signed releases
+
+If a release explicitly supplies Authenticode-signed Windows files, check them:
 
 ```powershell
 Get-AuthenticodeSignature -LiteralPath .\shadowclaw.exe |
   Format-List Status,SignerCertificate,TimeStamperCertificate
 ```
 
-Require `Valid`, the publisher named in that release's notes, and a timestamp.
-An external ZIP signature alone is not Authenticode. The Windows verification
-report records the expected subjects and file digests inside the package.
-Do not execute a package to find out whether its signature is valid.
+For that signed variant, require `Valid`, the stated publisher and a timestamp.
+`windows-signatures.json` records the expected subjects and per-file hashes.
+For the default unsigned variant, `NotSigned` is expected. An external checksum
+signature does not provide a Windows-verified publisher name. Do not execute
+any package merely to determine its trust status.
 
 For macOS, retain the platform's Gatekeeper, Developer ID and notarization
 checks. For Linux, the Cosign signature authenticates the release inventory;

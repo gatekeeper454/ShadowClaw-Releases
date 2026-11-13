@@ -3,6 +3,8 @@ import hashlib
 import importlib.util
 import io
 import json
+import subprocess
+import sys
 from pathlib import Path
 import tarfile
 import tempfile
@@ -188,6 +190,42 @@ class ReleaseBoundaryTests(unittest.TestCase):
         r.write_json(report, [])
         with self.assertRaisesRegex(ValueError, "Missing Windows"):
             r.windows_pack(self.staged, signing, report)
+
+    def test_unsigned_windows_report_covers_unchanged_payload(self):
+        path = self.sources / "shadowclaw-2.0.0-windows-amd64.zip"
+        payload = b"MZ synthetic unsigned"
+        with zipfile.ZipFile(path, "w") as archive:
+            archive.writestr("shadowclaw.exe", payload)
+        r.stage(self.private_spec(path, "windows-amd64"), self.staged)
+        original = r.digest(self.staged / path.name)
+        report = self.root / "unsigned.json"
+        record = {"path": path.name + "/shadowclaw.exe", "sha256": hashlib.sha256(payload).hexdigest(), "authenticode": "NotSigned"}
+        r.write_json(report, [record])
+        r.windows_unsigned(self.staged, report)
+        self.assertEqual(original, r.digest(self.staged / path.name))
+        self.assertIn(r.UNSIGNED_REPORT, (self.staged / r.CHECKSUMS).read_text())
+        r.verify(self.staged)
+        bad = dict(record, authenticode="Valid")
+        r.write_json(report, [bad])
+        with self.assertRaisesRegex(ValueError, "status/hash"):
+            r.verify_unsigned_report(self.staged, r.load(self.staged / r.MANIFEST), [bad])
+        with self.assertRaisesRegex(ValueError, "inventory"):
+            r.verify_unsigned_report(self.staged, r.load(self.staged / r.MANIFEST), [record, record])
+
+    @unittest.skipUnless(sys.platform == "win32", "Requires native Windows signature inspection")
+    def test_native_unsigned_powershell_report_without_execution(self):
+        directory = self.root / "unsigned-files"
+        directory.mkdir()
+        # This is inspected as data; the deliberately failing script must never run.
+        (directory / "install.ps1").write_text("throw 'Uploaded payload was executed'\n")
+        report = self.root / "report.json"
+        command = Path(__file__).parents[1] / "tools/verify-windows.ps1"
+        subprocess.run(["pwsh", "-NoProfile", "-File", str(command), "-Directory", str(directory),
+                        "-Unsigned", "-Report", str(report)], check=True)
+        value = r.load(report)
+        self.assertEqual(1, len(value))
+        self.assertEqual("NotSigned", value[0]["authenticode"])
+        self.assertEqual(r.digest(directory / "install.ps1"), value[0]["sha256"])
 
 
 if __name__ == "__main__":
