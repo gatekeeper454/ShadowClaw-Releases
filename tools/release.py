@@ -37,7 +37,8 @@ LEAK = re.compile(
     rb"-----BEGIN (?:[A-Z ]*PRIVATE KEY)-----|"
     rb"gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|"
     rb"AKIA[0-9A-Z]{16}|"
-    rb"/(?:Users|home)/[A-Za-z0-9_.-]+/|[A-Za-z]:\\Users\\[A-Za-z0-9_.-]+\\|"
+    # /Users/Shared is macOS's public shared folder, not a developer home.
+    rb"/(?:Users/(?!Shared/)|home/)[A-Za-z0-9_.-]+/|[A-Za-z]:\\Users\\[A-Za-z0-9_.-]+\\|"
     rb"(?i:authorization\s*[:=]\s*[\"']?bearer\s+[A-Za-z0-9_.-]{12,})|"
     rb"(?i:(?:client_secret|api_key|access_token|password)\s*[\"']?\s*[:=]\s*[\"'][A-Za-z0-9_./+=-]{16,}[\"'])"
 )
