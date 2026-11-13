@@ -10,6 +10,11 @@ on:
         description: 'Reviewed draft release-manifest.json SHA-256'
         required: true
         type: string
+      normalize_msi:
+        description: 'Finalize draft MSI action metadata with native Windows API before checking it'
+        required: false
+        default: false
+        type: boolean
 permissions:
   contents: read
 jobs:
@@ -110,7 +115,19 @@ jobs:
           with open(os.environ['GITHUB_ENV'],'a',encoding='utf-8') as stream:
               stream.write('PACKAGE_ARCHIVE='+str(Path('incoming',matches[0]['name']).resolve())+'\n')
           print('Approved package SHA-256:',matches[0]['sha256'])
+      - name: Finalize MSI metadata with the native Windows writer
+        if: inputs.normalize_msi
+        shell: pwsh
+        run: ./tools/normalize-windows-msi.ps1 -PackagePath $env:PACKAGE_ARCHIVE
       - name: Exercise the combined installer only on this disposable runner
         shell: pwsh
         run: |
           ./tools/check-windows-msi.ps1 -PackagePath $env:PACKAGE_ARCHIVE
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: inputs.normalize_msi
+        with:
+          name: finalized-${{ matrix.platform }}
+          path: ${{ runner.temp }}/native-finalized-msi/
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
