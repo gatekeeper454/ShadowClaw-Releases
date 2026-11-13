@@ -15,6 +15,7 @@ function MSI([string]$Mode) {
     $process=Start-Process -FilePath $msiexec -ArgumentList @('/'+$Mode,'"'+$PackagePath+'"','/qn','/norestart','/l*v','"'+$log+'"') -PassThru -Wait
     if ($process.ExitCode -notin @(0,3010)) {
         if (Test-Path $log) { Get-Content $log | Select-String 'Return value 3|Error |exception|failed|Failure' | Select-Object -Last 20 }
+        Get-WinEvent -FilterHashtable @{LogName='Application';ProviderName='MsiInstaller';Id=29001} -MaxEvents 5 -ErrorAction SilentlyContinue | ForEach-Object {Write-Output $_.Message}
         if ($Mode -eq 'i') {
             $zip=[IO.Path]::Combine([IO.Path]::GetDirectoryName($PackagePath),[IO.Path]::GetFileNameWithoutExtension($PackagePath).ToLowerInvariant()+'.zip')
             if (Test-Path -LiteralPath $zip) {
