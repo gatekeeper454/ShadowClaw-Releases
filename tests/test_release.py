@@ -97,7 +97,10 @@ class ReleaseBoundaryTests(unittest.TestCase):
         for name in ["../escape", "C:/escape", "safe/../../escape", "safe\\escape", ".git/config", "src/main.go", "bin/debug.pdb", "nested.zip", "CON.txt", "trail. "]:
             with self.subTest(name=name):
                 with zipfile.ZipFile(path, "w") as archive:
-                    archive.writestr(name, b"synthetic")
+                    info = zipfile.ZipInfo()
+                    info.filename = name
+                    info.orig_filename = name
+                    archive.writestr(info, b"synthetic")
                 with self.assertRaises(ValueError):
                     r.archive_members(path)
         with zipfile.ZipFile(path, "w") as archive:
