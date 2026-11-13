@@ -37,7 +37,8 @@ LEAK = re.compile(
     rb"-----BEGIN (?:[A-Z ]*PRIVATE KEY)-----|"
     rb"gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|"
     rb"AKIA[0-9A-Z]{16}|"
-    rb"/(?:Users|home)/[A-Za-z0-9_.-]+/|[A-Za-z]:\\Users\\[A-Za-z0-9_.-]+\\|"
+    # /Users/Shared is macOS's public shared folder, not a developer home.
+    rb"/(?:Users/(?!Shared/)|home/)[A-Za-z0-9_.-]+/|[A-Za-z]:\\Users\\[A-Za-z0-9_.-]+\\|"
     rb"(?i:authorization\s*[:=]\s*[\"']?bearer\s+[A-Za-z0-9_.-]{12,})|"
     rb"(?i:(?:client_secret|api_key|access_token|password)\s*[\"']?\s*[:=]\s*[\"'][A-Za-z0-9_./+=-]{16,}[\"'])"
 )
@@ -104,10 +105,17 @@ def safe_member(name):
 def scan_stream(stream):
     tail = b""
     size = 0
+    is_elf = False
     while chunk := stream.read(1024 * 1024):
+        if size == 0:
+            is_elf = chunk.startswith(b"\x7fELF")
         size += len(chunk)
         require(size <= MAX_FILE, "File exceeds scan limit")
-        require(not LEAK.search(tail + chunk), "Potential credential/private path detected; review locally")
+        for match in LEAK.finditer(tail + chunk):
+            # ELF string tables may place generic /home/ and root/ constants
+            # together. This exact root-account constant is not a developer home.
+            require(is_elf and match.group() == b"/home/root/",
+                    "Potential credential/private path detected; review locally")
         tail = chunk[-2048:]
 
 

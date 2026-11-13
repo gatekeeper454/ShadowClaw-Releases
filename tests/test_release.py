@@ -153,6 +153,16 @@ class ReleaseBoundaryTests(unittest.TestCase):
                     r.scan_stream(io.BytesIO(data))
                 self.assertNotIn(data.decode(), str(caught.exception))
 
+    def test_public_macos_shared_folder_is_not_a_personal_home(self):
+        r.scan_stream(io.BytesIO(b"/Users/Shared/shadowclaw-go-filedrop-"))
+        for value in [b"/Users/SharedPerson/private/",b"/Users/fixture/private/",b"/home/fixture/private/"]:
+            with self.assertRaises(ValueError):r.scan_stream(io.BytesIO(value))
+
+    def test_elf_generic_root_constant_keeps_other_privacy_checks(self):
+        r.scan_stream(io.BytesIO(b"\x7fELF generic /home/root/ constant"))
+        for value in [b"/home/root/private/",b"\x7fELF /home/fixture/private/",b"\x7fELF ghp_"+b"x"*30]:
+            with self.assertRaises(ValueError):r.scan_stream(io.BytesIO(value))
+
     def test_unsigned_bundle_blocks_upload(self):
         self.stage()
         with patch.object(r, "gh") as github:
