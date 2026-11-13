@@ -9,7 +9,9 @@ foreach ($sql in @(
  'CREATE TABLE `File` (`File` CHAR(72) NOT NULL, `FileName` CHAR(255) NOT NULL PRIMARY KEY `File`)',
  'INSERT INTO `File` (`File`,`FileName`) VALUES (''FixtureEntry'',''MsiAction.ps1'')',
  'CREATE TABLE `Property` (`Property` CHAR(72) NOT NULL, `Value` CHAR(0) NOT NULL LOCALIZABLE PRIMARY KEY `Property`)',
- 'INSERT INTO `Property` (`Property`,`Value`) VALUES (''SHADOWCLAW_MSI_INCOMPLETE'',''1'')'
+ 'INSERT INTO `Property` (`Property`,`Value`) VALUES (''SHADOWCLAW_MSI_INCOMPLETE'',''1'')',
+ 'CREATE TABLE `CreateFolder` (`Directory_` CHAR(72) NOT NULL, `Component_` CHAR(72) NOT NULL PRIMARY KEY `Directory_`,`Component_`)',
+ 'CREATE TABLE `MsiLockPermissionsEx` (`MsiLockPermissionsEx` CHAR(72) NOT NULL, `LockObject` CHAR(72) NOT NULL, `Table` CHAR(32) NOT NULL, `SDDLText` CHAR(0) NOT NULL, `Condition` CHAR(255) PRIMARY KEY `MsiLockPermissionsEx`)'
 )) { $view=$db.OpenView($sql);$view.Execute();$view.Close();[Runtime.InteropServices.Marshal]::FinalReleaseComObject($view) | Out-Null }
 $db.Commit();[Runtime.InteropServices.Marshal]::FinalReleaseComObject($db) | Out-Null
 $priorTemp=$env:RUNNER_TEMP;$priorEnv=$env:GITHUB_ENV
@@ -28,6 +30,10 @@ try {
  $view.Close()
  $view=$db.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''SHADOWCLAW_MSI_INCOMPLETE''');$view.Execute()
  if ($view.Fetch()) {throw 'Finalized MSI still has its incomplete-package gate.'}
+ $view.Close();[Runtime.InteropServices.Marshal]::FinalReleaseComObject($view) | Out-Null
+ $view=$db.OpenView('SELECT `SDDLText` FROM `MsiLockPermissionsEx` WHERE `MsiLockPermissionsEx`=''VendorACL''');$view.Execute()
+ $parentAcl=$view.Fetch()
+ if (-not $parentAcl -or $parentAcl.StringData(1) -ne 'O:BAG:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;GRGX;;;BU)') {throw 'Native MSI shared program parent is not protected.'}
  $view.Close();[Runtime.InteropServices.Marshal]::FinalReleaseComObject($view) | Out-Null
  [Runtime.InteropServices.Marshal]::FinalReleaseComObject($db) | Out-Null
  Write-Output 'PASS: native MSI database rewrite and subsequent action-table read.'

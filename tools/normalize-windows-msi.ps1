@@ -46,6 +46,14 @@ try {
         [Runtime.InteropServices.Marshal]::FinalReleaseComObject($row) | Out-Null
         [Runtime.InteropServices.Marshal]::FinalReleaseComObject($view) | Out-Null
     }
+    # The native sensor also protects the shared parent of its program root.
+    # MSI creates that parent first, so author the same protected ProgramSDDL.
+    if (($tables -contains 'CreateFolder') -and ($tables -contains 'MsiLockPermissionsEx')) {
+        Query 'DELETE FROM `MsiLockPermissionsEx` WHERE `MsiLockPermissionsEx`=''VendorACL'''
+        Query 'DELETE FROM `CreateFolder` WHERE `Directory_`=''VENDORDIR'''
+        Query 'INSERT INTO `CreateFolder` (`Directory_`,`Component_`) VALUES (''VENDORDIR'',''ProtectedFolder'')'
+        Query 'INSERT INTO `MsiLockPermissionsEx` (`MsiLockPermissionsEx`,`LockObject`,`Table`,`SDDLText`,`Condition`) VALUES (''VendorACL'',''VENDORDIR'',''CreateFolder'',''O:BAG:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;GRGX;;;BU)'',''1'')'
+    }
     if ($tables -contains 'Property') { Query 'DELETE FROM `Property` WHERE `Property`=''SHADOWCLAW_MSI_INCOMPLETE''' }
     # Update summary information through this open database; opening the same
     # file through Installer while views are alive creates a sharing conflict.
@@ -57,5 +65,5 @@ try {
 } finally { [Runtime.InteropServices.Marshal]::FinalReleaseComObject($db) | Out-Null }
 [Runtime.InteropServices.Marshal]::FinalReleaseComObject($engine) | Out-Null
 [GC]::Collect();[GC]::WaitForPendingFinalizers()
-@{input_sha256=(Get-FileHash -LiteralPath $PackagePath -Algorithm SHA256).Hash.ToLowerInvariant();output_sha256=(Get-FileHash -LiteralPath $copy -Algorithm SHA256).Hash.ToLowerInvariant();change='Native Windows CustomAction table writer; embedded product payload unchanged.'} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output 'metadata-finalization.json')
+@{input_sha256=(Get-FileHash -LiteralPath $PackagePath -Algorithm SHA256).Hash.ToLowerInvariant();output_sha256=(Get-FileHash -LiteralPath $copy -Algorithm SHA256).Hash.ToLowerInvariant();change='Native Windows action table and protected parent folder metadata; embedded product payload unchanged.'} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output 'metadata-finalization.json')
 'PACKAGE_ARCHIVE='+$copy | Out-File -LiteralPath $env:GITHUB_ENV -Encoding utf8 -Append
