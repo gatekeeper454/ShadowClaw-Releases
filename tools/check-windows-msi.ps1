@@ -21,8 +21,8 @@ function MSI([string]$Mode) {
                 $diagnostic=Join-Path $env:RUNNER_TEMP ('sc-msi-diagnostic-'+[Guid]::NewGuid().ToString('N'))
                 Expand-Archive -LiteralPath $zip -DestinationPath $diagnostic
                 $legacyPS=Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell/v1.0/powershell.exe'
-                $systemLog=Join-Path $diagnostic 'system-output.txt'
-                $systemScript=Join-Path $diagnostic 'system-check.ps1'
+                $systemLog=Join-Path $env:RUNNER_TEMP ('system-output-'+[Guid]::NewGuid().ToString('N')+'.txt')
+                $systemScript=Join-Path $env:RUNNER_TEMP ('system-check-'+[Guid]::NewGuid().ToString('N')+'.ps1')
                 $payload=Join-Path $diagnostic 'Install.ps1'
                 @(
                     '$ErrorActionPreference="Stop"',
