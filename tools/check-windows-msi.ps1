@@ -14,9 +14,9 @@ function MSI([string]$Mode) {
     $log=Join-Path $env:RUNNER_TEMP ('shadowclaw-msi-'+$Mode+'.log')
     $process=Start-Process -FilePath $msiexec -ArgumentList @('/'+$Mode,'"'+$PackagePath+'"','/qn','/norestart','/l*v','"'+$log+'"') -PassThru -Wait
     if ($process.ExitCode -notin @(0,3010)) {
-        if (Test-Path $log) { Get-Content $log | Select-String 'Return value 3|Error |exception|failed|Failure' | Select-Object -Last 20 }
+        if (Test-Path $log) { Get-Content -LiteralPath $log | Select-Object -Last 700 }
         Get-WinEvent -FilterHashtable @{LogName='Application';ProviderName='MsiInstaller';Id=29001} -MaxEvents 5 -ErrorAction SilentlyContinue | ForEach-Object {Write-Output $_.Message}
-        $actionLogs=Join-Path $data 'ShadowClawInstaller'
+        $actionLogs=Join-Path $program 'ShadowClaw/InstallerLogs'
         if (Test-Path -LiteralPath $actionLogs) { Get-ChildItem -LiteralPath $actionLogs -Filter '*.log' | ForEach-Object { Write-Output $_.Name; Get-Content -LiteralPath $_.FullName } }
         if ($Mode -eq 'i') {
             $zip=[IO.Path]::Combine([IO.Path]::GetDirectoryName($PackagePath),[IO.Path]::GetFileNameWithoutExtension($PackagePath).ToLowerInvariant()+'.zip')
