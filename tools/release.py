@@ -287,7 +287,7 @@ def draft_info(tag):
     return value
 
 
-def download(tag, directory, expected):
+def download(tag, directory, expected, finalized=False):
     require(not directory.exists(), "Download directory must be new")
     info = draft_info(tag)
     require(1 <= len(info["assets"]) <= 105 and sum(a["size"] for a in info["assets"]) <= 4 * MAX_FILE,
@@ -299,7 +299,11 @@ def download(tag, directory, expected):
     gh("release", "download", tag, "--repo", REPOSITORY, "--dir", str(directory))
     manifest = verify(directory, expected)
     require("v" + manifest["version"] == tag, "Draft version mismatch")
-    require(not any((directory / name).exists() for name in (BUNDLE, REPORT, UNSIGNED_REPORT)), "Draft was already finalized; do not re-sign it")
+    if finalized:
+        require((directory / BUNDLE).is_file(), "Native validation requires a finalized checksum-signed draft")
+        verify_bundle(directory)
+    else:
+        require(not any((directory / name).exists() for name in (BUNDLE, REPORT, UNSIGNED_REPORT)), "Draft was already finalized; do not re-sign it")
     return manifest
 
 
@@ -390,18 +394,22 @@ def windows_pack(directory, signing, report):
     verify(directory)
 
 
-def upload_final(tag, directory, original_hash, publish):
-    manifest = verify(directory)
-    require(tag == "v" + manifest["version"], "Release version mismatch")
-    require((directory / BUNDLE).is_file(), "Signed checksum bundle required")
-    if any(a["role"] == "package" and a["platform"].startswith("windows-") for a in manifest["assets"]):
-        require((directory / REPORT).is_file() or (directory / UNSIGNED_REPORT).is_file(), "Windows trust-status report required")
+def verify_bundle(directory):
     subprocess.run([
         "cosign", "verify-blob", "--bundle", str(directory / BUNDLE),
         "--certificate-identity", f"https://github.com/{REPOSITORY}/.github/workflows/release.yml@refs/heads/main",
         "--certificate-oidc-issuer", "https://token.actions.githubusercontent.com",
         str(directory / CHECKSUMS),
     ], check=True)
+
+
+def upload_final(tag, directory, original_hash, publish):
+    manifest = verify(directory)
+    require(tag == "v" + manifest["version"], "Release version mismatch")
+    require((directory / BUNDLE).is_file(), "Signed checksum bundle required")
+    if any(a["role"] == "package" and a["platform"].startswith("windows-") for a in manifest["assets"]):
+        require((directory / REPORT).is_file() or (directory / UNSIGNED_REPORT).is_file(), "Windows trust-status report required")
+    verify_bundle(directory)
     # Fetch the draft again to detect edits while signing. Never update published assets.
     import tempfile
     with tempfile.TemporaryDirectory() as temp:
@@ -421,7 +429,7 @@ def upload_final(tag, directory, original_hash, publish):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["stage", "verify", "draft", "download", "windows-unpack", "windows-pack", "windows-unsigned", "upload-final"])
+    parser.add_argument("command", choices=["stage", "verify", "draft", "download", "download-validation", "windows-unpack", "windows-pack", "windows-unsigned", "upload-final"])
     parser.add_argument("--directory", type=Path)
     parser.add_argument("--spec", type=Path)
     parser.add_argument("--out", type=Path)
@@ -436,9 +444,9 @@ def main():
         require(args.spec and args.out, "stage requires --spec and --out")
         stage(args.spec, args.out)
         print("Approved manifest SHA-256:", digest(args.out / MANIFEST))
-    elif args.command == "download":
+    elif args.command in {"download", "download-validation"}:
         require(args.tag and args.out and args.expected, "download requires --tag, --out and --expected")
-        value = download(args.tag, args.out, args.expected)
+        value = download(args.tag, args.out, args.expected, finalized=args.command == "download-validation")
         windows = any(a["role"] == "package" and a["platform"].startswith("windows-") for a in value["assets"])
         if os.environ.get("GITHUB_OUTPUT"):
             with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as stream:
