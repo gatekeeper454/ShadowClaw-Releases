@@ -21,7 +21,23 @@ function MSI([string]$Mode) {
                 $diagnostic=Join-Path $env:RUNNER_TEMP ('sc-msi-diagnostic-'+[Guid]::NewGuid().ToString('N'))
                 Expand-Archive -LiteralPath $zip -DestinationPath $diagnostic
                 $legacyPS=Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell/v1.0/powershell.exe'
-                Write-Output 'Diagnosing the same verified installer under native Windows PowerShell 5.1:'
+                $systemLog=Join-Path $diagnostic 'system-output.txt'
+                $systemScript=Join-Path $diagnostic 'system-check.ps1'
+                $payload=Join-Path $diagnostic 'Install.ps1'
+                @(
+                    '$ErrorActionPreference="Stop"',
+                    "try { & '$payload' -Action Install *> '$systemLog' } catch { `$_ | Format-List * -Force | Out-String | Out-File '$systemLog' -Append; exit 1 }"
+                ) | Set-Content -LiteralPath $systemScript
+                $task='ShadowClaw-Diagnostic-'+[Guid]::NewGuid().ToString('N')
+                try {
+                    $action=New-ScheduledTaskAction -Execute $legacyPS -Argument ('-NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File "'+$systemScript+'"')
+                    $principal=New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+                    Register-ScheduledTask -TaskName $task -Action $action -Principal $principal | Out-Null
+                    Start-ScheduledTask -TaskName $task
+                    Start-Sleep 10
+                    if (Test-Path $systemLog) { Write-Output 'SYSTEM-context diagnostic:'; Get-Content $systemLog }
+                } finally { Unregister-ScheduledTask -TaskName $task -Confirm:$false -ErrorAction SilentlyContinue }
+                Write-Output 'Diagnosing the same verified installer under native Windows PowerShell 5.1:' 
                 & $legacyPS -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File (Join-Path $diagnostic 'Install.ps1') -Action Install
                 Write-Output ('Diagnostic installer exit: '+$LASTEXITCODE)
                 & $legacyPS -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File (Join-Path $diagnostic 'Install.ps1') -Action Uninstall
