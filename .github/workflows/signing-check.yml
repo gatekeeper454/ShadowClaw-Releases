@@ -1,0 +1,37 @@
+name: Check release signing
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  signing-check:
+    if: github.repository == 'gatekeeper454/ShadowClaw-Releases' && github.ref == 'refs/heads/main'
+    runs-on: windows-2022
+    timeout-minutes: 15
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.4
+      - name: Sign synthetic text and verify the exact workflow identity
+        run: |
+          printf '%s\n' 'ShadowClaw distribution signing self-test; no product artifact' > signing-check.txt
+          cosign sign-blob --yes --bundle signing-check.sigstore.json signing-check.txt
+          cosign verify-blob --bundle signing-check.sigstore.json \
+            --certificate-identity 'https://github.com/gatekeeper454/ShadowClaw-Releases/.github/workflows/signing-check.yml@refs/heads/main' \
+            --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' signing-check.txt
+      - name: Reject changed bytes
+        run: |
+          printf '%s\n' 'altered bytes' >> signing-check.txt
+          if cosign verify-blob --bundle signing-check.sigstore.json \
+            --certificate-identity 'https://github.com/gatekeeper454/ShadowClaw-Releases/.github/workflows/signing-check.yml@refs/heads/main' \
+            --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' signing-check.txt; then
+            echo 'ERROR: modified bytes were accepted'
+            exit 1
+          fi

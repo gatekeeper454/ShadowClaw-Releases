@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.venv/
+incoming/
+signing/
+staged/
+*.private.json
+windows-signatures.json

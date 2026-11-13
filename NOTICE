@@ -1,0 +1,6 @@
+ShadowClaw release distribution tooling
+Copyright (c) 2026 Mike Storm.
+
+This repository contains release distribution tooling, not the ShadowClaw
+application source. Application distributions include their own applicable
+licenses, copyright notices and third-party acknowledgements.
