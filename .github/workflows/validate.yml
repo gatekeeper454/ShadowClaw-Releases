@@ -26,6 +26,8 @@ jobs:
         shell: pwsh
         run: |
           $parseErrors = $null
-          [System.Management.Automation.Language.Parser]::ParseFile(
-            "$pwd/tools/verify-windows.ps1", [ref]$null, [ref]$parseErrors) | Out-Null
-          if ($parseErrors.Count) { throw 'PowerShell parse failed' }
+          foreach ($path in @('tools/verify-windows.ps1','tools/check-windows-package.ps1')) {
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              "$pwd/$path", [ref]$null, [ref]$parseErrors) | Out-Null
+            if ($parseErrors.Count) { throw 'PowerShell parse failed' }
+          }

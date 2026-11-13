@@ -143,7 +143,14 @@ require maintainer approval and allow deployments only from `main`. A solo
 maintainer may approve their own dispatch; this is an explicit checkpoint,
 not independent two-person approval. Restrict Actions to the pinned official
 checkout/Python, Azure login/signing and Sigstore installer actions used here.
-Do not use self-hosted runners or execute uploaded programs/scripts in release jobs.
+Do not use self-hosted runners or execute uploaded programs/scripts in signing jobs.
+
+The separate manual **Check combined Windows packages** workflow runs only an
+explicitly approved draft manifest on fresh GitHub-hosted x64/ARM64 VMs. It has
+read-only repository access, no OIDC token permission and no signing credential.
+It checks inert installation of both components, explicit activation, liveness,
+stop, reinstall, and data-preserving removal. These isolated installer checks
+are separate from detector coverage, reboot, long-duration soak or certification.
 
 The original development repository must remain private. Any previously public
 copies/forks cannot be recalled by repository visibility settings. No visibility
