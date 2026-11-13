@@ -117,7 +117,9 @@ Windows trust policy in the public release notes. For unsigned packages, link
 users to the checksum verification and Windows prompt/policy guidance.
 
 With publishing disabled, retrieve the signed draft's bytes and run final native
-acceptance against them. After those gates pass, publish that existing signed
+acceptance against them. The manual Windows package check takes the finalized
+manifest SHA-256, verifies its production Cosign signer, and tests those exact
+files. After those gates pass, publish that existing signed
 draft through GitHub's release UI. Do **not** rerun finalization on an already finalized draft. Optional
 Authenticode changes Windows package bytes and requires acceptance of the new hashes.
 If native acceptance has already qualified these exact final bytes and you
@@ -148,7 +150,7 @@ checkout/Python, Azure login/signing and Sigstore installer actions used here.
 Do not use self-hosted runners or execute uploaded programs/scripts in signing jobs.
 
 The separate manual **Check combined Windows packages** workflow runs only an
-explicitly approved draft manifest on fresh GitHub-hosted x64/ARM64 VMs. It has
+explicitly approved, finalized checksum-signed draft on fresh GitHub-hosted x64/ARM64 VMs. It has
 read-only repository access, no OIDC token permission and no signing credential.
 It checks inert installation of both components, explicit activation, liveness,
 stop, reinstall, and data-preserving removal. These isolated installer checks

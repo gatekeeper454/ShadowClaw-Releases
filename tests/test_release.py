@@ -3,6 +3,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -174,6 +175,26 @@ class ReleaseBoundaryTests(unittest.TestCase):
         with patch.object(r, "gh", return_value=json.dumps({"isDraft": False})):
             with self.assertRaisesRegex(ValueError, "published"):
                 r.draft_info("v2.0.0")
+
+    def test_finalized_candidate_download_verifies_production_signer(self):
+        self.stage()
+        (self.staged/r.BUNDLE).write_text('{}')
+        def github(*args,**kwargs):
+            if args[:2]==('release','view'):
+                return json.dumps({'isDraft':True,'assets':[{'name':p.name,'size':p.stat().st_size} for p in self.staged.iterdir()]})
+            if args[:2]==('release','download'):
+                directory=Path(args[args.index('--dir')+1])
+                for path in self.staged.iterdir():shutil.copyfile(path,directory/path.name)
+                return ''
+            self.fail('Unexpected GitHub operation')
+        with patch.object(r,'gh',side_effect=github),patch.object(r.subprocess,'run') as verify:
+            r.download('v2.0.0',self.root/'validated',r.digest(self.staged/r.MANIFEST),finalized=True)
+            arguments=verify.call_args.args[0]
+            self.assertIn('https://github.com/gatekeeper454/ShadowClaw-Releases/.github/workflows/release.yml@refs/heads/main',arguments)
+            self.assertIn('https://token.actions.githubusercontent.com',arguments)
+        with patch.object(r,'gh',side_effect=github):
+            with self.assertRaisesRegex(ValueError,'already finalized'):
+                r.download('v2.0.0',self.root/'resign',r.digest(self.staged/r.MANIFEST))
 
     def test_windows_repack_preserves_other_bytes_and_exact_targets(self):
         path = self.sources / "shadowclaw-2.0.0-windows-amd64.zip"
