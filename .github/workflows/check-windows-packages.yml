@@ -116,6 +116,7 @@ jobs:
               stream.write('PACKAGE_ARCHIVE='+str(Path('incoming',matches[0]['name']).resolve())+'\n')
           print('Approved package SHA-256:',matches[0]['sha256'])
       - name: Finalize MSI metadata with the native Windows writer
+        id: finalize
         if: inputs.normalize_msi
         shell: pwsh
         run: ./tools/normalize-windows-msi.ps1 -PackagePath $env:PACKAGE_ARCHIVE
@@ -124,7 +125,7 @@ jobs:
         run: |
           ./tools/check-windows-msi.ps1 -PackagePath $env:PACKAGE_ARCHIVE
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: inputs.normalize_msi
+        if: always() && inputs.normalize_msi && steps.finalize.outcome == 'success'
         with:
           name: finalized-${{ matrix.platform }}
           path: ${{ runner.temp }}/native-finalized-msi/
