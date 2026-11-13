@@ -135,6 +135,17 @@ class ReleaseBoundaryTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "expansion"):
                 r.archive_members(self.package)
 
+    def test_tar_relative_link_to_included_regular_payload_is_safe(self):
+        with tarfile.open(self.package, "w:gz") as archive:
+            binary=tarfile.TarInfo("payload/usr/libexec/shadowclaw/shadowclaw")
+            binary.size=3
+            archive.addfile(binary,io.BytesIO(b"ELF"))
+            link=tarfile.TarInfo("payload/usr/bin/shadowclaw")
+            link.type=tarfile.SYMTYPE
+            link.linkname="../libexec/shadowclaw/shadowclaw"
+            archive.addfile(link)
+        self.assertEqual(["payload/usr/libexec/shadowclaw/shadowclaw"],r.archive_members(self.package))
+
     def test_credentials_and_private_paths_not_echoed(self):
         for data in [b"ghp_" + b"a" * 30, b"-----BEGIN PRIVATE KEY-----", b"/Users/fixture/project/file", b"C:\\Users\\fixture\\private", b'api_key = "' + b"a" * 30 + b'"']:
             with self.subTest(data=data[:8]):

@@ -1,0 +1,62 @@
+name: Check combined Windows packages
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Approved candidate version, without v'
+        required: true
+        type: string
+      manifest_sha256:
+        description: 'Reviewed draft release-manifest.json SHA-256'
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  native:
+    if: github.repository == 'gatekeeper454/ShadowClaw-Releases' && github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-amd64
+            runner: windows-2022
+          - platform: windows-arm64
+            runner: windows-11-arm
+    name: Native combined installer (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    environment: release
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: v${{ inputs.version }}
+      APPROVED_MANIFEST: ${{ inputs.manifest_sha256 }}
+      PACKAGE_PLATFORM: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+      - name: Download and validate the exact reviewed draft
+        shell: bash
+        run: python tools/release.py download --tag "$RELEASE_TAG" --out incoming --expected "$APPROVED_MANIFEST"
+      - name: Select the validated archive for this native architecture
+        shell: python
+        run: |
+          import json, os
+          from pathlib import Path
+          value=json.loads(Path('incoming/release-manifest.json').read_text())
+          matches=[a for a in value['assets'] if a['platform']==os.environ['PACKAGE_PLATFORM'] and a['role']=='package' and a['name'].endswith('.zip')]
+          if len(matches)!=1: raise SystemExit('Require exactly one combined ZIP per target')
+          with open(os.environ['GITHUB_ENV'],'a',encoding='utf-8') as stream:
+              stream.write('PACKAGE_ARCHIVE='+str(Path('incoming',matches[0]['name']).resolve())+'\n')
+          print('Approved package SHA-256:',matches[0]['sha256'])
+      - name: Exercise the combined installer only on this disposable runner
+        shell: pwsh
+        run: |
+          Expand-Archive -LiteralPath $env:PACKAGE_ARCHIVE -DestinationPath candidate
+          ./tools/check-windows-package.ps1 -PackageDirectory (Resolve-Path candidate).Path

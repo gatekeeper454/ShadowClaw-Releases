@@ -16,11 +16,13 @@ engineered; do not put runtime secrets in it. Public Actions logs, file names,
 certificate subjects and Sigstore transparency records must be treated as public.
 
 The tooling blocks common source/debug/key files, credential patterns, private
-home paths, linked/hidden files, nested archives, path traversal and excessive
+home paths, unsafe links/hidden files, nested archives, path traversal and excessive
 archive expansion. This is defense in depth, not proof that an asset is safe.
 Manually inspect opaque MSI/DEB/RPM/PKG/DMG/PDF contents and their extracted
 payloads in a suitable private environment. ZIP/TAR inspection has finite limits
-and deliberately rejects links and nested archives. Do not weaken these checks
+and deliberately rejects ZIP links, hard links and nested archives. TAR symbolic
+links must resolve inside the archive to an included regular file; directory
+links and link chains are rejected. Do not weaken these checks
 to upload a development/source bundle.
 
 ## Stage explicitly selected bytes
@@ -143,7 +145,14 @@ require maintainer approval and allow deployments only from `main`. A solo
 maintainer may approve their own dispatch; this is an explicit checkpoint,
 not independent two-person approval. Restrict Actions to the pinned official
 checkout/Python, Azure login/signing and Sigstore installer actions used here.
-Do not use self-hosted runners or execute uploaded programs/scripts in release jobs.
+Do not use self-hosted runners or execute uploaded programs/scripts in signing jobs.
+
+The separate manual **Check combined Windows packages** workflow runs only an
+explicitly approved draft manifest on fresh GitHub-hosted x64/ARM64 VMs. It has
+read-only repository access, no OIDC token permission and no signing credential.
+It checks inert installation of both components, explicit activation, liveness,
+stop, reinstall, and data-preserving removal. These isolated installer checks
+are separate from detector coverage, reboot, long-duration soak or certification.
 
 The original development repository must remain private. Any previously public
 copies/forks cannot be recalled by repository visibility settings. No visibility

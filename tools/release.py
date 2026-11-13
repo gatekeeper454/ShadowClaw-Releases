@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import json
 import os
+import posixpath
 from pathlib import Path, PurePosixPath
 import re
 import shutil
@@ -141,14 +142,24 @@ def archive_members(path):
                         scan_stream(stream)
                     entries.append(member.filename)
     else:
+        kinds = {}
+        links = {}
         with tarfile.open(path, "r:gz") as archive:
             for member in archive:
                 check(member.name, member.size)
-                require(member.isfile() or member.isdir(), "Linked/special TAR member rejected")
+                require(member.isfile() or member.isdir() or member.issym(), "Linked/special TAR member rejected")
+                kinds[member.name] = "file" if member.isfile() else "other"
+                if member.issym():
+                    require(not re.search(r"[\\:\x00-\x1f\x7f]", member.linkname) and not member.linkname.startswith("/"), "Unsafe TAR link target")
+                    target = posixpath.normpath(posixpath.join(posixpath.dirname(member.name), member.linkname))
+                    safe_member(target)
+                    links[member.name] = target
                 if member.isfile():
                     with archive.extractfile(member) as stream:
                         scan_stream(stream)
                     entries.append(member.name)
+        for target in links.values():
+            require(kinds.get(target) == "file", "Linked TAR target must be an included regular file")
     return entries
 
 
@@ -448,6 +459,7 @@ def main():
             commit = json.loads(gh("api", f"repos/{REPOSITORY}/commits/{branch}"))["sha"]
             gh("release", "create", "v" + value["version"], "--repo", REPOSITORY, "--draft", "--target", commit,
                "--title", "ShadowClaw " + value["version"], "--notes-file", str(args.notes),
+               *(["--prerelease"] if "-" in value["version"] else []),
                *sorted(str(p) for p in args.directory.iterdir()), capture=False)
         else:
             print("Release inventory verified")
