@@ -105,13 +105,12 @@ jobs:
           import json, os
           from pathlib import Path
           value=json.loads(Path('incoming/release-manifest.json').read_text())
-          matches=[a for a in value['assets'] if a['platform']==os.environ['PACKAGE_PLATFORM'] and a['role']=='package' and a['name'].endswith('.zip')]
-          if len(matches)!=1: raise SystemExit('Require exactly one combined ZIP per target')
+          matches=[a for a in value['assets'] if a['platform']==os.environ['PACKAGE_PLATFORM'] and a['role']=='package' and a['name'].endswith('.msi')]
+          if len(matches)!=1: raise SystemExit('Require exactly one full MSI per target')
           with open(os.environ['GITHUB_ENV'],'a',encoding='utf-8') as stream:
               stream.write('PACKAGE_ARCHIVE='+str(Path('incoming',matches[0]['name']).resolve())+'\n')
           print('Approved package SHA-256:',matches[0]['sha256'])
       - name: Exercise the combined installer only on this disposable runner
         shell: pwsh
         run: |
-          Expand-Archive -LiteralPath $env:PACKAGE_ARCHIVE -DestinationPath candidate
-          ./tools/check-windows-package.ps1 -PackageDirectory (Resolve-Path candidate).Path
+          ./tools/check-windows-msi.ps1 -PackagePath $env:PACKAGE_ARCHIVE
