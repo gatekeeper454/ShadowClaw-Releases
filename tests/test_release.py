@@ -61,6 +61,14 @@ class ReleaseBoundaryTests(unittest.TestCase):
             r.stage(spec_path, self.staged)
         self.assertFalse(self.staged.exists())
 
+    def test_public_inventories_use_portable_lf_even_on_windows(self):
+        self.stage()
+        for name in (r.MANIFEST, r.CHECKSUMS):
+            self.assertNotIn(b"\r", (self.staged / name).read_bytes())
+        r.refresh(self.staged, r.load(self.staged / r.MANIFEST))
+        for name in (r.MANIFEST, r.CHECKSUMS):
+            self.assertNotIn(b"\r", (self.staged / name).read_bytes())
+
     def test_extra_file_rejected(self):
         self.stage()
         (self.staged / "accidental-source.go").write_text("package private")

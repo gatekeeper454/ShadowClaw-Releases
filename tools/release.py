@@ -66,8 +66,14 @@ def load(path):
     return json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=unique)
 
 
+def write_text(path, value):
+    # Checksum files are consumed on Linux/macOS even when signing on Windows.
+    with Path(path).open("w", encoding="utf-8", newline="\n") as stream:
+        stream.write(value)
+
+
 def write_json(path, value):
-    Path(path).write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    write_text(path, json.dumps(value, indent=2, sort_keys=True) + "\n")
 
 
 def safe_name(name):
@@ -198,7 +204,7 @@ def refresh(directory, manifest):
         asset.update(sha256=digest(path), size=path.stat().st_size)
     validate_manifest(manifest)
     write_json(directory / MANIFEST, manifest)
-    (directory / CHECKSUMS).write_text(checksums(directory, manifest), encoding="utf-8")
+    write_text(directory / CHECKSUMS, checksums(directory, manifest))
 
 
 def verify(directory, expected=None):
@@ -242,7 +248,7 @@ def stage(spec_path, output):
         shutil.copyfile(source, output / asset["name"])
     # Check copied bytes, not just the source; private paths never enter output.
     write_json(output / MANIFEST, manifest)
-    (output / CHECKSUMS).write_text(checksums(output, manifest), encoding="utf-8")
+    write_text(output / CHECKSUMS, checksums(output, manifest))
     verify(output)
 
 
