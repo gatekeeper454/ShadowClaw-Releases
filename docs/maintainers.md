@@ -150,8 +150,11 @@ checkout/Python, Azure login/signing and Sigstore installer actions used here.
 Do not use self-hosted runners or execute uploaded programs/scripts in signing jobs.
 
 The separate manual **Check combined Windows packages** workflow runs only an
-explicitly approved, finalized checksum-signed draft on fresh GitHub-hosted x64/ARM64 VMs. It has
-read-only repository access, no OIDC token permission and no signing credential.
+explicitly approved, finalized checksum-signed draft on fresh GitHub-hosted x64/ARM64 VMs. A separate preparation job uses draft-read access to verify the production
+signature and transfer a one-day immutable artifact. It never executes product
+code. Native jobs recheck the authenticated inventory hash, have read-only
+repository access and receive no draft-access token, OIDC permission or signing
+credential.
 It checks inert installation of both components, explicit activation, liveness,
 stop, reinstall, and data-preserving removal. These isolated installer checks
 are separate from detector coverage, reboot, long-duration soak or certification.
